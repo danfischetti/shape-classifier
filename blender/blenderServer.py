@@ -1,6 +1,7 @@
 import bpy
 import json
 import math
+import gc
 import random
 import asyncio
 from asyncio import coroutine, sleep, Task, wait_for
@@ -15,25 +16,29 @@ from mathutils import Vector
 
 def center():
     for i in range(56):
-        obj = bpy.data.objects[3+i]
+        obj = bpy.data.objects[2+i]
         bpy.ops.object.select_all(action='DESELECT')
         obj.select = True
         bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY',center='BOUNDS')
-        bpy.data.objects[3+i].location.x = 0 
-        bpy.data.objects[3+i].location.y = 0
-        bpy.data.objects[3+i].location.z = 0
+        bpy.data.objects[2+i].location.x = 0 
+        bpy.data.objects[2+i].location.y = 0
+        bpy.data.objects[2+i].location.z = 0
 
 def augment():
     for i in range(56):
-        obj = bpy.data.objects[3+i]
+        obj = bpy.data.objects[2+i]
         bpy.ops.object.select_all(action='DESELECT')
         obj.select = True
-        bpy.ops.transform.rotate(value = 0.1*(2*random.random()-1),axis = (0.0,0.0,1.0))
-        s = 1 + 0.2*random.random()-0.1
-        obj.scale = [s,s,s]
+        bpy.ops.transform.rotate(value = 0.5*(2*random.random()-1),axis = (0.0,0.0,1.0))
+        bpy.ops.transform.rotate(value = 0*0.2*(2*random.random()-1),axis = (1.0,0.0,0.0))
+        bpy.ops.transform.rotate(value = 0*0.2*(2*random.random()-1),axis = (0.0,1.0,0.0))
+        s1 = 1 + 0.1*(2*random.random()-1)
+        s3 = 1 + 0.1*(2*random.random()-1)
+        s2 = 1 + 0.1*(2*random.random()-1)
+        obj.scale = [s1,s2,s3]
 
 def get_view(area,a,b,z,z_look,index,n):
-    r = 0.75*(1+a)
+    r = 0.4+0.75*(1+a)
     theta = math.pi*b
     x = r*math.cos(theta)
     y = r*math.sin(theta)
@@ -46,7 +51,6 @@ def do_render(area,index,n):
     bpy.ops.object.select_all(action='DESELECT')
     obj.select = True
     bpy.data.objects['Lamp'].select = True
-    bpy.data.objects['Lamp2'].select = True
     ctx=bpy.context.copy()
     ctx['area']=area
     bpy.ops.object.hide_render_clear(ctx)       
@@ -79,6 +83,8 @@ def deleteObjects():
     for item in bpy.data.meshes:
         bpy.data.meshes.remove(item)
 
+    gc.collect()
+
 def loadObjects(batch):
     deleteObjects()
 
@@ -94,7 +100,7 @@ def loadObjects(batch):
 
     for obj in bpy.data.objects:
         if obj.type == 'CAMERA' or obj.type == 'LAMP':
-            if obj.name != 'Camera' and obj.name != 'Lamp' and obj.name != 'Lamp2':
+            if obj.name != 'Camera' and obj.name != 'Lamp':
                 bpy.data.objects.remove(obj)
 
     center()
@@ -108,10 +114,8 @@ def loadObjects(batch):
             bpy.ops.object.select_all(action='DESELECT')
            
             bpy.data.objects['Lamp'].select = True
-            bpy.data.objects['Lamp2'].select = True
             bpy.ops.object.hide_render_set(override,unselected=True)
             bpy.data.objects['Lamp'].select = False
-            bpy.data.objects['Lamp2'].select = False
     
 
 def callMethod(method,params,area):
@@ -127,11 +131,6 @@ def http_server():
     import aiohttp
     from aiohttp import web
 
-    lamp_data = bpy.data.lamps.new(name="Lamp2", type='POINT')
-    lamp_object = bpy.data.objects.new(name="Lamp2", object_data=lamp_data)
-    bpy.context.scene.objects.link(lamp_object)
-    lamp_object.location = (-4.0, 1.0, 6.0)
-
     ctx_3d = {}
 
     for area in bpy.context.screen.areas:
@@ -142,6 +141,12 @@ def http_server():
     bpy.context.scene.render.resolution_y = 128
     bpy.context.scene.render.image_settings.file_format='PNG'
     bpy.context.scene.render.image_settings.color_mode='BW'
+
+    world = bpy.context.scene.world
+    wset = world.light_settings
+    wset.use_environment_light = True
+    wset.environment_energy = 0.2
+    wset.gather_method = 'APPROXIMATE'
 
     @coroutine
     def handle(request):
